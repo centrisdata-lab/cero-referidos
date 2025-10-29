@@ -10,10 +10,25 @@ import pandas as pd
 class SheetsManager:
     def __init__(self):
         """Inicializa la conexión con Google Sheets"""
-        self.creds = Credentials.from_service_account_file(
-            str(SERVICE_ACCOUNT_FILE),
-            scopes=SCOPES
-        )
+        import streamlit as st
+        import os
+
+        # Intentar obtener credenciales desde Streamlit Secrets (Cloud)
+        if hasattr(st, 'secrets') and 'gcp_service_account' in st.secrets:
+            # Usar credenciales desde Streamlit Secrets
+            self.creds = Credentials.from_service_account_info(
+                dict(st.secrets['gcp_service_account']),
+                scopes=SCOPES
+            )
+        elif os.path.exists(SERVICE_ACCOUNT_FILE):
+            # Usar archivo local (desarrollo local)
+            self.creds = Credentials.from_service_account_file(
+                str(SERVICE_ACCOUNT_FILE),
+                scopes=SCOPES
+            )
+        else:
+            raise ValueError("No se encontraron credenciales de Google Cloud. Configura Streamlit Secrets o agrega service_account.json")
+
         self.client = gspread.authorize(self.creds)
         self.spreadsheet = None
 
