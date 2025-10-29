@@ -80,7 +80,7 @@ def mostrar_vista_general_visual(stats, df):
     pct_no_contactados = (no_contactados/stats['general']['total_personas']*100) if stats['general']['total_personas'] > 0 else 0
 
     # PASO 1: Métricas principales del flujo
-    col_lideres, col_contactados, col_no_contactados, col_activaron, col_total_refs = st.columns(5)
+    col_lideres, col_contactados, col_no_contactados, col_activaron, col_total_refs, col_promedio = st.columns(6)
 
     with col_lideres:
         st.metric(
@@ -115,6 +115,14 @@ def mostrar_vista_general_visual(stats, df):
             label="👥 Total Referidos",
             value=stats['general']['referidos_activos'],
             delta=f"{stats['general']['referidos_inactivos']} inactivos"
+        )
+
+    with col_promedio:
+        promedio = stats['general']['referidos_activos'] / contactados_activaron if contactados_activaron > 0 else 0
+        st.metric(
+            label="📊 Promedio x Líder",
+            value=f"{promedio:.1f}",
+            delta="Solo activos"
         )
 
     st.markdown("<br>", unsafe_allow_html=True)
@@ -157,31 +165,6 @@ def mostrar_vista_general_visual(stats, df):
             st.metric("Activaron", no_contactados_activaron, delta=f"{(no_contactados_activaron/no_contactados*100 if no_contactados > 0 else 0):.1f}%")
         with col_nc3:
             st.metric("Total Refs", no_contactados_total_refs, delta=f"{no_contactados_refs_inactivos} inactivos")
-
-    # Resumen de referidos sin título
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    col_r1, col_r2, col_r3 = st.columns(3)
-
-    with col_r1:
-        st.metric(
-            label="✅ Referidos Activos",
-            value=stats['general']['referidos_activos']
-        )
-
-    with col_r2:
-        st.metric(
-            label="💤 Referidos Inactivos",
-            value=stats['general']['referidos_inactivos']
-        )
-
-    with col_r3:
-        promedio = stats['general']['referidos_activos'] / contactados_activaron if contactados_activaron > 0 else 0
-        st.metric(
-            label="📊 Promedio por Líder",
-            value=f"{promedio:.1f}",
-            delta="Solo activos"
-        )
 
 def clasificar_iglesias_por_efectividad(df, stats_iglesia):
     """Clasifica iglesias según efectividad de gestión"""
