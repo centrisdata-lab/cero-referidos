@@ -34,12 +34,29 @@ def cargar_datos():
             df['Referidos Activos'] = pd.to_numeric(df['Referidos Activos'], errors='coerce').fillna(0)
             df['Referidos Inactivos'] = pd.to_numeric(df['Referidos Inactivos'], errors='coerce').fillna(0)
 
+            # Asegurar que las columnas de contacto sean texto limpio
+            if 'Contactado' in df.columns:
+                df['Contactado'] = df['Contactado'].astype(str).str.strip().str.upper()
+            if 'Contestaron' in df.columns:
+                df['Contestaron'] = df['Contestaron'].astype(str).str.strip().str.upper()
+
         return df
     except Exception as e:
         st.error(f"Error al cargar datos: {e}")
         return pd.DataFrame()
 
-def mostrar_vista_general_visual(stats, df):
+def crear_barra_progreso(valor, total, label, color="#1E88E5", mostrar_porcentaje_abajo=True):
+    """Crea una barra de progreso horizontal con porcentaje"""
+    porcentaje = (valor / total * 100) if total > 0 else 0
+
+    porcentaje_html = ""
+    if mostrar_porcentaje_abajo:
+        porcentaje_html = f'<span style="position: absolute; width: 100%; text-align: center; line-height: 30px; font-weight: bold; color: {"white" if porcentaje > 50 else "#333"}; font-size: 1.1em;">{porcentaje:.1f}%</span>'
+
+    html = f"""<div style="margin: 20px 0;"><div style="display: flex; justify-content: space-between; margin-bottom: 5px;"><span style="font-weight: bold; font-size: 1.1em;">{label}</span><span style="font-weight: bold; font-size: 1.1em; color: {color};">{valor} / {total} ({porcentaje:.1f}%)</span></div><div style="width: 100%; background-color: #e0e0e0; border-radius: 10px; height: 30px; position: relative;"><div style="width: {porcentaje}%; background-color: {color}; height: 100%; border-radius: 10px; transition: width 0.3s ease;"></div>{porcentaje_html}</div></div>"""
+    return html
+
+def mostrar_vista_general_visual(df, promedio_lideres):
     """Muestra la vista general con flujo visual del proceso"""
 
     # Título principal con estilo
@@ -49,166 +66,180 @@ def mostrar_vista_general_visual(stats, df):
         </h1>
     """, unsafe_allow_html=True)
 
-    # Calcular personas con referidos activados
-    contactados = stats['general']['contactados']
-    no_contactados = stats['general']['no_contactados']
+    # CÁLCULOS GENERALES
+    total_lideres = len(df)
+    lideres_cero_referidos = len(df[df['Referidos Activos'] == 0])
 
-    # CONTACTADOS: activaron referidos y total de referidos
-    df_contactados = df[df['Contactado'].str.upper() == 'SI'].copy()
-    # Convertir a numérico por si hay strings
-    df_contactados['Referidos Activos'] = pd.to_numeric(df_contactados['Referidos Activos'], errors='coerce').fillna(0)
-    df_contactados['Referidos Inactivos'] = pd.to_numeric(df_contactados['Referidos Inactivos'], errors='coerce').fillna(0)
-    contactados_activaron = len(df_contactados[df_contactados['Referidos Activos'] > 0])
-    contactados_total_refs = int(df_contactados['Referidos Activos'].sum())  # Solo activos
-    contactados_refs_inactivos = int(df_contactados['Referidos Inactivos'].sum())
+    # Contactabilidad - usar la columna "Contestaron" si existe, sino usar "Contactado"
+    columna_contacto = 'Contestaron' if 'Contestaron' in df.columns else 'Contactado'
+    contactados = len(df[df[columna_contacto] == 'SI'])
+    no_contactados = len(df[df[columna_contacto] != 'SI'])
 
-    # NO CONTACTADOS: activaron referidos y total de referidos
-    df_no_contactados = df[df['Contactado'].str.upper() != 'SI'].copy()
-    # Convertir a numérico por si hay strings
-    df_no_contactados['Referidos Activos'] = pd.to_numeric(df_no_contactados['Referidos Activos'], errors='coerce').fillna(0)
-    df_no_contactados['Referidos Inactivos'] = pd.to_numeric(df_no_contactados['Referidos Inactivos'], errors='coerce').fillna(0)
-    no_contactados_activaron = len(df_no_contactados[df_no_contactados['Referidos Activos'] > 0])
-    no_contactados_total_refs = int(df_no_contactados['Referidos Activos'].sum())  # Solo activos
-    no_contactados_refs_inactivos = int(df_no_contactados['Referidos Inactivos'].sum())
+    # ============================================================
+    # SECCIÓN 1: LÍDERES CON CERO REFERIDOS (SIN PORCENTAJE ABAJO)
+    # ============================================================
+    st.markdown(crear_barra_progreso(
+        lideres_cero_referidos,
+        promedio_lideres,
+        "Líderes con Cero Referidos",
+        "#E53935",
+        mostrar_porcentaje_abajo=False
+    ), unsafe_allow_html=True)
 
-    sin_activar = contactados - contactados_activaron if contactados > 0 else 0
-    efectividad = (contactados_activaron / contactados * 100) if contactados > 0 else 0
-
-    # Calcular porcentajes
-    efectividad_total = (contactados_activaron / stats['general']['total_personas'] * 100) if stats['general']['total_personas'] > 0 else 0
-    pct_contactados = (contactados/stats['general']['total_personas']*100) if stats['general']['total_personas'] > 0 else 0
-    pct_no_contactados = (no_contactados/stats['general']['total_personas']*100) if stats['general']['total_personas'] > 0 else 0
-
-    # PASO 1: Métricas principales del flujo
-    col_lideres, col_contactados, col_no_contactados, col_activaron, col_total_refs, col_promedio = st.columns(6)
-
-    with col_lideres:
-        st.metric(
-            label="🎯 Total de Líderes",
-            value=stats['general']['total_personas']
-        )
-
-    with col_contactados:
-        st.metric(
-            label="📞 Contactados",
-            value=contactados,
-            delta=f"{pct_contactados:.1f}%"
-        )
-
-    with col_no_contactados:
-        st.metric(
-            label="❌ No Contactados",
-            value=no_contactados,
-            delta=f"{pct_no_contactados:.1f}%",
-            delta_color="inverse"
-        )
-
-    with col_activaron:
-        st.metric(
-            label="✅ Activaron Referidos",
-            value=contactados_activaron,
-            delta=f"{efectividad_total:.1f}%"
-        )
-
-    with col_total_refs:
-        st.metric(
-            label="👥 Total Referidos",
-            value=stats['general']['referidos_activos'],
-            delta=f"{stats['general']['referidos_inactivos']} inactivos"
-        )
-
-    with col_promedio:
-        promedio = stats['general']['referidos_activos'] / contactados_activaron if contactados_activaron > 0 else 0
-        st.metric(
-            label="📊 Promedio x Líder",
-            value=f"{promedio:.1f}",
-            delta="Solo activos"
-        )
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # Desglose por Contactados vs No Contactados
+    # ============================================================
+    # SECCIÓN 2: CONTACTABILIDAD (SIN PORCENTAJE ABAJO)
+    # ============================================================
     st.markdown("""
-        <h2 style='text-align: center; color: #424242; font-size: 1.5em; margin-bottom: 10px; margin-top: 5px;'>
-            📊 Desglose: Contactados vs No Contactados
+        <h2 style='color: #424242; font-size: 1.6em; margin-top: 15px; margin-bottom: 10px;'>
+            📞 Contactabilidad
         </h2>
     """, unsafe_allow_html=True)
 
-    col_desg1, col_desg2 = st.columns(2)
+    col1, col2 = st.columns(2)
 
-    with col_desg1:
-        st.markdown("""
-            <div style='text-align: center; padding: 10px; background-color: #e8f5e9; border-radius: 10px; margin-bottom: 10px;'>
-                <h3 style='color: #2e7d32; margin: 0;'>📞 CONTACTADOS</h3>
+    with col1:
+        st.markdown(crear_barra_progreso(
+            contactados,
+            total_lideres,
+            "Contestaron",
+            "#43A047",
+            mostrar_porcentaje_abajo=False
+        ), unsafe_allow_html=True)
+
+    with col2:
+        st.markdown(crear_barra_progreso(
+            no_contactados,
+            total_lideres,
+            "No Contestaron",
+            "#FB8C00",
+            mostrar_porcentaje_abajo=False
+        ), unsafe_allow_html=True)
+
+    # ============================================================
+    # SECCIÓN 3: ACTIVACIÓN DE REFERIDOS (DEBAJO DE CONTACTABILIDAD)
+    # ============================================================
+
+    # Calcular métricas para CONTESTARON
+    df_contestaron = df[df[columna_contacto] == 'SI'].copy()
+    contestaron_activaron = len(df_contestaron[df_contestaron['Referidos Activos'] > 0])
+    contestaron_sin_activar = len(df_contestaron[df_contestaron['Referidos Activos'] == 0])
+    contestaron_total_refs_activos = int(df_contestaron['Referidos Activos'].sum())
+    contestaron_total_refs_inactivos = int(df_contestaron['Referidos Inactivos'].sum())
+    contestaron_pct_activaron = (contestaron_activaron / len(df_contestaron) * 100) if len(df_contestaron) > 0 else 0
+
+    # Calcular métricas para NO CONTESTARON
+    df_no_contestaron = df[df[columna_contacto] != 'SI'].copy()
+    no_contestaron_activaron = len(df_no_contestaron[df_no_contestaron['Referidos Activos'] > 0])
+    no_contestaron_sin_activar = len(df_no_contestaron[df_no_contestaron['Referidos Activos'] == 0])
+    no_contestaron_total_refs_activos = int(df_no_contestaron['Referidos Activos'].sum())
+    no_contestaron_total_refs_inactivos = int(df_no_contestaron['Referidos Inactivos'].sum())
+    no_contestaron_pct_activaron = (no_contestaron_activaron / len(df_no_contestaron) * 100) if len(df_no_contestaron) > 0 else 0
+
+    col_contest, col_no_contest = st.columns(2)
+
+    # COLUMNA CONTESTARON
+    with col_contest:
+        st.markdown(f"""
+            <div style='background-color: #f5f5f5; padding: 12px; border-radius: 8px; margin-bottom: 8px;'>
+                <h4 style='color: #424242; margin-top: 0; margin-bottom: 8px; font-size: 1.1em;'>👥 Activación de Referidos</h4>
+                <p style='font-size: 1.1em; margin: 5px 0;'>
+                    <strong style='color: #43A047;'>{contestaron_activaron}</strong> activaron referidos
+                    <span style='color: #666;'>({contestaron_pct_activaron:.1f}%)</span>
+                </p>
+                <p style='font-size: 1.1em; margin: 5px 0;'>
+                    <strong style='color: #E53935;'>{contestaron_sin_activar}</strong> sin activar
+                    <span style='color: #666;'>({100-contestaron_pct_activaron:.1f}%)</span>
+                </p>
             </div>
         """, unsafe_allow_html=True)
 
-        col_c1, col_c2, col_c3 = st.columns(3)
-        with col_c1:
-            st.metric("Total", contactados)
-        with col_c2:
-            st.metric("Activaron", contactados_activaron, delta=f"{(contactados_activaron/contactados*100 if contactados > 0 else 0):.1f}%")
-        with col_c3:
-            st.metric("Total Refs", contactados_total_refs, delta=f"{contactados_refs_inactivos} inactivos")
-
-    with col_desg2:
-        st.markdown("""
-            <div style='text-align: center; padding: 10px; background-color: #ffebee; border-radius: 10px; margin-bottom: 10px;'>
-                <h3 style='color: #c62828; margin: 0;'>❌ NO CONTACTADOS</h3>
+        st.markdown(f"""
+            <div style='background-color: #f5f5f5; padding: 12px; border-radius: 8px;'>
+                <h4 style='color: #424242; margin-top: 0; margin-bottom: 8px; font-size: 1.1em;'>📈 Referidos</h4>
+                <p style='font-size: 1.2em; margin: 5px 0;'>
+                    <strong style='color: #1E88E5;'>{contestaron_total_refs_activos}</strong> referidos activos
+                </p>
+                <p style='font-size: 1em; margin: 5px 0; color: #666;'>
+                    {contestaron_total_refs_inactivos} referidos inactivos
+                </p>
             </div>
         """, unsafe_allow_html=True)
 
-        col_nc1, col_nc2, col_nc3 = st.columns(3)
-        with col_nc1:
-            st.metric("Total", no_contactados)
-        with col_nc2:
-            st.metric("Activaron", no_contactados_activaron, delta=f"{(no_contactados_activaron/no_contactados*100 if no_contactados > 0 else 0):.1f}%")
-        with col_nc3:
-            st.metric("Total Refs", no_contactados_total_refs, delta=f"{no_contactados_refs_inactivos} inactivos")
+    # COLUMNA NO CONTESTARON
+    with col_no_contest:
+        st.markdown(f"""
+            <div style='background-color: #f5f5f5; padding: 12px; border-radius: 8px; margin-bottom: 8px;'>
+                <h4 style='color: #424242; margin-top: 0; margin-bottom: 8px; font-size: 1.1em;'>👥 Activación de Referidos</h4>
+                <p style='font-size: 1.1em; margin: 5px 0;'>
+                    <strong style='color: #43A047;'>{no_contestaron_activaron}</strong> activaron referidos
+                    <span style='color: #666;'>({no_contestaron_pct_activaron:.1f}%)</span>
+                </p>
+                <p style='font-size: 1.1em; margin: 5px 0;'>
+                    <strong style='color: #E53935;'>{no_contestaron_sin_activar}</strong> sin activar
+                    <span style='color: #666;'>({100-no_contestaron_pct_activaron:.1f}%)</span>
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
 
-def clasificar_iglesias_por_efectividad(df, stats_iglesia):
-    """Clasifica iglesias según efectividad de gestión"""
-    # Calcular efectividad por iglesia
-    stats_iglesia['Efectividad'] = 0.0
-    stats_iglesia['Con Referidos'] = 0
+        st.markdown(f"""
+            <div style='background-color: #f5f5f5; padding: 12px; border-radius: 8px;'>
+                <h4 style='color: #424242; margin-top: 0; margin-bottom: 8px; font-size: 1.1em;'>📈 Referidos</h4>
+                <p style='font-size: 1.2em; margin: 5px 0;'>
+                    <strong style='color: #1E88E5;'>{no_contestaron_total_refs_activos}</strong> referidos activos
+                </p>
+                <p style='font-size: 1em; margin: 5px 0; color: #666;'>
+                    {no_contestaron_total_refs_inactivos} referidos inactivos
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
 
-    for idx, row in stats_iglesia.iterrows():
-        iglesia = row['Iglesia']
-        df_iglesia = df[df['Iglesia'] == iglesia]
+    # ============================================================
+    # SECCIÓN 3: DISTRIBUCIÓN DE RESPUESTAS (Solo contestaron)
+    # ============================================================
+    st.markdown("""
+        <h2 style='color: #424242; font-size: 1.6em; margin-top: 15px; margin-bottom: 10px;'>
+            💬 Distribución de Respuestas (Solo Contestaron)
+        </h2>
+    """, unsafe_allow_html=True)
 
-        # Personas contactadas que activaron referidos
-        con_referidos = len(df_iglesia[(df_iglesia['Contactado'].str.upper() == 'SI') &
-                                       (df_iglesia['Referidos Activos'] > 0)])
-        contactados = row['Contactados']
+    df_contactados_full = df[df[columna_contacto] == 'SI'].copy()
 
-        efectividad = (con_referidos / contactados * 100) if contactados > 0 else 0
+    if len(df_contactados_full) > 0:
+        # Contar respuestas
+        respuestas_count = df_contactados_full['Respuesta'].value_counts().reset_index()
+        respuestas_count.columns = ['Respuesta', 'Cantidad']
 
-        stats_iglesia.at[idx, 'Con Referidos'] = con_referidos
-        stats_iglesia.at[idx, 'Efectividad'] = round(efectividad, 1)
+        # Crear gráfica de barras horizontal
+        fig_respuestas = go.Figure()
 
-    # Clasificar por nivel de atención
-    def clasificar_nivel(row):
-        efectividad = row['Efectividad']
-        no_contactados = row['No Contactados']
+        colores = ['#1E88E5', '#43A047', '#FB8C00', '#E53935', '#8E24AA', '#00ACC1']
 
-        # Crítico: Efectividad baja (<30%) o muchos sin contactar
-        if efectividad < 30 or (no_contactados > row['Total Personas'] * 0.5):
-            return '🔴 CRÍTICO'
-        # Medio: Efectividad media (30-60%)
-        elif efectividad < 60:
-            return '🟡 MEDIO'
-        # Normal: Efectividad alta (>60%)
-        else:
-            return '🟢 NORMAL'
+        for idx, row in respuestas_count.iterrows():
+            porcentaje = (row['Cantidad'] / contactados * 100)
+            fig_respuestas.add_trace(go.Bar(
+                y=[row['Respuesta']],
+                x=[row['Cantidad']],
+                orientation='h',
+                text=f"{row['Cantidad']} ({porcentaje:.1f}%)",
+                textposition='auto',
+                marker_color=colores[idx % len(colores)],
+                name=row['Respuesta']
+            ))
 
-    stats_iglesia['Nivel de Atención'] = stats_iglesia.apply(clasificar_nivel, axis=1)
+        fig_respuestas.update_layout(
+            showlegend=False,
+            height=250,
+            margin=dict(l=10, r=10, t=10, b=10),
+            xaxis_title="Cantidad de Líderes",
+            yaxis_title="",
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font=dict(size=11)
+        )
 
-    # Ordenar por nivel de atención (crítico primero)
-    orden_nivel = {'🔴 CRÍTICO': 0, '🟡 MEDIO': 1, '🟢 NORMAL': 2}
-    stats_iglesia['_orden'] = stats_iglesia['Nivel de Atención'].map(orden_nivel)
-    stats_iglesia = stats_iglesia.sort_values('_orden').drop('_orden', axis=1)
-
-    return stats_iglesia
+        st.plotly_chart(fig_respuestas, use_container_width=True)
+    else:
+        st.info("No hay líderes contactados aún")
 
 
 def main():
@@ -227,63 +258,66 @@ def main():
         st.info("Asegúrate de haber configurado el SPREADSHEET_ID en config.py")
         return
 
-    # Filtro por iglesia - MOVER ARRIBA ANTES DE CALCULAR ESTADÍSTICAS
+    # Filtro por iglesia en el sidebar
     st.sidebar.header("🔍 Filtros")
 
     iglesias = ['Todas'] + sorted(df['Iglesia'].unique().tolist())
-    iglesia_seleccionada = st.sidebar.selectbox("Seleccionar Iglesia", iglesias)
 
-    # FILTRAR DATAFRAME SEGÚN SELECCIÓN
+    # Definir valor por defecto: SAN DIEGO si existe, sino el primero disponible
+    default_iglesia = "SAN DIEGO" if "SAN DIEGO" in iglesias else iglesias[0]
+    default_index = iglesias.index(default_iglesia)
+
+    iglesia_seleccionada = st.sidebar.selectbox("Seleccionar Iglesia", iglesias, index=default_index)
+
+    # Calcular el promedio de la columna "Cantidad de lideres" si existe en el Excel
+    if 'Cantidad de lideres' in df.columns:
+        # Convertir a numérico y calcular el promedio
+        promedio_lideres_cero = int(pd.to_numeric(df['Cantidad de lideres'], errors='coerce').mean())
+    else:
+        # Si no existe la columna, calcular el promedio contando líderes con cero referidos por iglesia
+        lideres_cero_por_iglesia = df[df['Referidos Activos'] == 0].groupby('Iglesia').size()
+        promedio_lideres_cero = int(lideres_cero_por_iglesia.mean())
+
+    # Filtrar dataframe según selección
     if iglesia_seleccionada != 'Todas':
         df_filtrado = df[df['Iglesia'] == iglesia_seleccionada].copy()
     else:
         df_filtrado = df.copy()
 
-    # Obtener estadísticas DEL DATAFRAME FILTRADO
-    try:
-        manager = get_sheets_manager()
-        manager.conectar_sheet()
+    # Mostrar el dashboard con los datos filtrados
+    mostrar_vista_general_visual(df_filtrado, promedio_lideres_cero)
 
-        # Calcular estadísticas del dataframe filtrado (no del original)
-        stats = manager.obtener_estadisticas_de_dataframe(df_filtrado)
+    # Separador
+    st.markdown("---")
 
-        if stats:
-            # Mostrar vista general visual CON DATOS FILTRADOS
-            mostrar_vista_general_visual(stats, df_filtrado)
-
-            st.markdown("---")
-
-            # Botón para ver datos en Google Sheets
-            st.markdown("<br>", unsafe_allow_html=True)
-            sheet_url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}"
-            titulo_boton = "VER DATOS COMPLETOS EN EXCEL" if iglesia_seleccionada == 'Todas' else f"VER DATOS DE {iglesia_seleccionada} EN EXCEL"
-            st.markdown(f"""
-            <div style="text-align: center; padding: 30px;">
-                <a href="{sheet_url}" target="_blank" style="text-decoration: none;">
-                    <div style="
-                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                        border: none;
-                        color: white;
-                        padding: 20px 50px;
-                        text-align: center;
-                        display: inline-block;
-                        font-size: 1.3em;
-                        font-weight: bold;
-                        cursor: pointer;
-                        border-radius: 50px;
-                        box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
-                        transition: all 0.3s ease;
-                    "
-                    onmouseover="this.style.transform='scale(1.05)'; this.style.boxShadow='0 12px 25px rgba(102, 126, 234, 0.6)';"
-                    onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 8px 20px rgba(102, 126, 234, 0.4)';">
-                        📊 {titulo_boton}
-                    </div>
-                </a>
+    # Botón para ver datos en Google Sheets
+    st.markdown("<br>", unsafe_allow_html=True)
+    sheet_url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}"
+    titulo_boton = "VER DATOS COMPLETOS EN EXCEL" if iglesia_seleccionada == 'Todas' else f"VER DATOS DE {iglesia_seleccionada} EN EXCEL"
+    st.markdown(f"""
+    <div style="text-align: center; padding: 30px;">
+        <a href="{sheet_url}" target="_blank" style="text-decoration: none;">
+            <div style="
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                border: none;
+                color: white;
+                padding: 20px 50px;
+                text-align: center;
+                display: inline-block;
+                font-size: 1.3em;
+                font-weight: bold;
+                cursor: pointer;
+                border-radius: 50px;
+                box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+                transition: all 0.3s ease;
+            "
+            onmouseover="this.style.transform='scale(1.05)'; this.style.boxShadow='0 12px 25px rgba(102, 126, 234, 0.6)';"
+            onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 8px 20px rgba(102, 126, 234, 0.4)';">
+                📊 {titulo_boton}
             </div>
-            """, unsafe_allow_html=True)
-
-    except Exception as e:
-        st.error(f"Error al procesar estadísticas: {e}")
+        </a>
+    </div>
+    """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
