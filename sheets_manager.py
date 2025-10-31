@@ -13,17 +13,18 @@ class SheetsManager:
         import streamlit as st
         import os
 
-        # Intentar obtener credenciales desde Streamlit Secrets (Cloud)
-        if hasattr(st, 'secrets') and 'gcp_service_account' in st.secrets:
-            # Usar credenciales desde Streamlit Secrets
-            self.creds = Credentials.from_service_account_info(
-                dict(st.secrets['gcp_service_account']),
-                scopes=SCOPES
-            )
-        elif os.path.exists(SERVICE_ACCOUNT_FILE):
+        # Prioridad 1: Usar archivo local si existe
+        if os.path.exists(SERVICE_ACCOUNT_FILE):
             # Usar archivo local (desarrollo local)
             self.creds = Credentials.from_service_account_file(
                 str(SERVICE_ACCOUNT_FILE),
+                scopes=SCOPES
+            )
+        # Prioridad 2: Intentar obtener credenciales desde Streamlit Secrets (Cloud)
+        elif hasattr(st, 'secrets') and 'gcp_service_account' in st.secrets:
+            # Usar credenciales desde Streamlit Secrets
+            self.creds = Credentials.from_service_account_info(
+                dict(st.secrets['gcp_service_account']),
                 scopes=SCOPES
             )
         else:
